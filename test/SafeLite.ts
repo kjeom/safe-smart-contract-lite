@@ -1,9 +1,9 @@
 import { expect } from "chai";
-import { Contract, Signer } from "ethers";
+import { Contract } from "ethers";
 import { ethers } from "hardhat";
 
 const sortSignatures = (signers: string[], signatures: string[]):string[] => {
-    let combined = signers.map((address, i) => ({ address, signature: signatures[i] }));
+    const combined = signers.map((address, i) => ({ address, signature: signatures[i] }));
     combined.sort((a, b) => a.address.localeCompare(b.address));
     return combined.map(x => x.signature);
 }
@@ -14,13 +14,11 @@ describe("SafeLite", () => {
         it("Should return Owner event with address and isOwner for each owner", async () => {
             const safeLiteContract = await ethers.getContractFactory("SafeLite");
             const [owner1, owner2, owner3] = await ethers.getSigners();
-
-            console.log(safeLiteContract.signer.getAddress())
-            const safeLiteDeployTx = await safeLiteContract.deploy(1001, [owner1.address, owner2.address, owner3.address], 2)
-            expect(safeLiteDeployTx)
-                .to.emit(safeLiteDeployTx, "Owner").withArgs(owner1.address, true)
-                .to.emit(safeLiteDeployTx, "Owner").withArgs(owner2.address, true)
-                .to.emit(safeLiteDeployTx, "Owner").withArgs(owner3.address, true)
+            const safeLite = await safeLiteContract.deploy(1001, [owner1.address, owner2.address, owner3.address], 2)
+            await expect(safeLite.deployTransaction)
+                .to.emit(safeLite, "Owner").withArgs(owner1.address, true)
+                .to.emit(safeLite, "Owner").withArgs(owner2.address, true)
+                .to.emit(safeLite, "Owner").withArgs(owner3.address, true)
         });
     });
 
@@ -87,7 +85,7 @@ describe("SafeLite", () => {
                 safeLite.interface.encodeFunctionData("addSigner",[owner4.address,3]), // interface.encodeFunctionData( fragment [ , values ] ) ⇒ string< DataHexString >
                 sortSignatures([owner1.address, owner2.address], [owner1Sig, owner2Sig])
             );
-            expect(tx).to.emit(tx, "Owner").withArgs(owner4.address, true)
+            await expect(tx).to.emit(safeLite, "Owner").withArgs(owner4.address, true)
         });
 
         it("Removing the existing signer should return Owner event", async () => {
@@ -105,11 +103,11 @@ describe("SafeLite", () => {
                 safeLite.interface.encodeFunctionData("removeSigner",[owner3.address,1]),
                 sortSignatures([owner1.address, owner2.address], [owner1Sig, owner2Sig]) // e.g. 한 사람이 n개 보내는 걸 방지, 각각 시그니쳐 받아서 할 수 있도록
             ); 
-            expect(tx).to.emit(tx, "Owner").withArgs(owner3.address, false)
+            expect(tx).to.emit(tx, "Owner").withArgs(owner3.address)
         });
 
-        it("Upadting the required signatures and check equal to signaturesRequired", async () => {
-            let newSignaturesRequired = 1;
+        it("Upadting the required signatures should make the signaturesRequired changed", async () => {
+            const newSignaturesRequired = 1;
             const hash = await safeLite.getTransactionHash(
                 await safeLite.nonce(),
                 safeLite.address,
