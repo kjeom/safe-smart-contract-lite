@@ -27,10 +27,10 @@ contract SafeLite {
         bytes result
     );
     event Owner(address indexed owner, bool added);
-    mapping(address => bool) public isOwner; 
-    uint public signaturesRequired; 
+    mapping(address => bool) public isOwner;
+    uint public signaturesRequired;
     uint public nonce;
-    uint public chainId; 
+    uint public chainId;
 
     constructor(uint256 _chainId, address[] memory _owners, uint _signaturesRequired) {
         require(_signaturesRequired > 0, "constructor: must be non-zero sigs required");
