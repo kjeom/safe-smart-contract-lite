@@ -79,15 +79,52 @@ describe("SafeLite", () => {
                 0,
                 safeLite.interface.encodeFunctionData("addSigner",[owner4.address,3])
             )
+            const owner1Sig = await owner1.signMessage(ethers.utils.arrayify(hash)) // utils . arrayify ( hexStringOrBigNumberOrArrayish )   =>   Uint8Array
+            const owner2Sig = await owner2.signMessage(ethers.utils.arrayify(hash))
+            const tx = await safeLite.executeTransaction(
+                safeLite.address,
+                0,
+                safeLite.interface.encodeFunctionData("addSigner",[owner4.address,3]), // interface.encodeFunctionData( fragment [ , values ] ) ⇒ string< DataHexString >
+                sortSignatures([owner1.address, owner2.address], [owner1Sig, owner2Sig])
+            );
+            expect(tx).to.emit(tx, "Owner").withArgs(owner4.address, true)
+        });
+
+        it("Removing the existing signer should return Owner event", async () => {
+            const hash = await safeLite.getTransactionHash(
+                await safeLite.nonce(),
+                safeLite.address,
+                0,
+                safeLite.interface.encodeFunctionData("removeSigner",[owner3.address,1])
+            )
             const owner1Sig = await owner1.signMessage(ethers.utils.arrayify(hash))
             const owner2Sig = await owner2.signMessage(ethers.utils.arrayify(hash))
             const tx = await safeLite.executeTransaction(
                 safeLite.address,
                 0,
-                safeLite.interface.encodeFunctionData("addSigner",[owner4.address,3]),
+                safeLite.interface.encodeFunctionData("removeSigner",[owner3.address,1]),
+                sortSignatures([owner1.address, owner2.address], [owner1Sig, owner2Sig]) // e.g. 한 사람이 n개 보내는 걸 방지, 각각 시그니쳐 받아서 할 수 있도록
+            ); 
+            expect(tx).to.emit(tx, "Owner").withArgs(owner3.address, false)
+        });
+
+        it("Upadting the required signatures and check equal to signaturesRequired", async () => {
+            let newSignaturesRequired = 1;
+            const hash = await safeLite.getTransactionHash(
+                await safeLite.nonce(),
+                safeLite.address,
+                0,
+                safeLite.interface.encodeFunctionData("updateSignaturesRequired",[newSignaturesRequired])
+            )
+            const owner1Sig = await owner1.signMessage(ethers.utils.arrayify(hash))
+            const owner2Sig = await owner2.signMessage(ethers.utils.arrayify(hash))
+            const tx = await safeLite.executeTransaction(
+                safeLite.address,
+                0,
+                safeLite.interface.encodeFunctionData("updateSignaturesRequired",[newSignaturesRequired]),
                 sortSignatures([owner1.address, owner2.address], [owner1Sig, owner2Sig])
             );
-            expect(tx).to.emit(tx, "Owner").withArgs(owner4.address, true)
+            expect(await safeLite.signaturesRequired()).to.equal(newSignaturesRequired);
         });
     });
 });
