@@ -1,6 +1,7 @@
 import { expect } from "chai";
 import { Contract } from "ethers";
 import { ethers } from "hardhat";
+import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
 
 const sortSignatures = (signers: string[], signatures: string[]): string[] => {
   const combined = signers.map((address, i) => ({ address, signature: signatures[i] }));
@@ -26,7 +27,10 @@ describe("SafeLite", () => {
 
   describe("execute transaction", () => {
     let safeLite: Contract;
-    let owner1, owner2, owner3;
+    let owner1:SignerWithAddress;
+    let owner2:SignerWithAddress; 
+    let owner3:SignerWithAddress;
+    
     beforeEach(async () => {
       const safeLiteContract = await ethers.getContractFactory("SafeLite");
       [owner1, owner2, owner3] = await ethers.getSigners();
