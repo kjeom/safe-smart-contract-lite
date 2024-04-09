@@ -1,5 +1,5 @@
-name: 'Setup'
-description: 'Setup hardhat and foundry dependencies'
+name: "Setup"
+description: "Setup hardhat and foundry dependencies"
 
 runs:
   using: "composite"
