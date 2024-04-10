@@ -116,6 +116,36 @@ describe("SafeLite", () => {
       expect(tx).to.emit(tx, "Owner").withArgs(owner4.address, true);
     });
 
+    // 새로운 서명자의 주소가 0일때 에러가 잘 뜨는지 확인
+    it("새로운 서명자의 주소가 0이면 에러가 뜬다", async () => {
+      const owner4 = ethers.constants.AddressZero; // 주소가 0인 유저4 생성
+
+      // 트랜잭션 시행 후 에러가 잘 뜨는지 확인
+      expect(
+        async () =>
+          await safeLite.getTrasactionHash(
+            await safeLite.nonce(),
+            safeLite.address,
+            0,
+            safeLite.interface.encodeFunctionData("addSigner", [owner4, 3]),
+          ),
+      ).to.be.reverted;
+    });
+
+    // 새로운 서명자가 고유하지 않을 때 에러가 잘 뜨는지 확인
+    it("새로운 서명자의 주소가 이미 있는 주소일 때 에러가 뜬다", async () => {
+      // 트랜잭션 시행 후 에러가 잘 뜨는지 확인
+      expect(
+        async () =>
+          await safeLite.getTrasactionHash(
+            await safeLite.nonce(),
+            safeLite.address,
+            0,
+            safeLite.interface.encodeFunctionData("addSigner", [owner1.address, 3]),
+          ),
+      ).to.be.reverted;
+    });
+
     // 기존 서명자를 제거하는 트랜잭션이 잘 수행되었는지 확인
     it("기존 서명자를 제거하면 Owner이벤트 리턴", async () => {
       // 유저3 제거에 대한 해시 생성 및 유저1 유저2 서명
