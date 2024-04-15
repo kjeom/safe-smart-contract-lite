@@ -107,9 +107,9 @@ describe("SafeLite", () => {
         safeLite.address,
         0,
         safeLite.interface.encodeFunctionData("removeSigner", [owner3.address, 1]),
-        sortSignatures([owner1.address, owner2.address], [owner1Sig, owner2Sig]), // e.g. 한 사람이 n개 보내는 걸 방지, 각각 시그니쳐 받아서 할 수 있도록
+        sortSignatures([owner1.address, owner2.address], [owner1Sig, owner2Sig]),
       );
-      expect(tx).to.emit(tx, "Owner").withArgs(owner3.address);
+      await expect(tx).to.emit(safeLite, "Owner").withArgs(owner3.address, false);
     });
 
     it("Upadting the required signatures should make the signaturesRequired changed", async () => {
