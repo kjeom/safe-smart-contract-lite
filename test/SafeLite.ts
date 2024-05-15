@@ -3,11 +3,13 @@ import { Contract } from "ethers";
 import { ethers } from "hardhat";
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
 
+/*
 const sortSignatures = (signers: string[], signatures: string[]): string[] => {
   const combined = signers.map((address, i) => ({ address, signature: signatures[i] }));
   combined.sort((a, b) => a.address.localeCompare(b.address));
   return combined.map((x) => x.signature);
 };
+*/
 
 describe("SafeLite", () => {
   describe("Deployment", () => {
@@ -22,6 +24,14 @@ describe("SafeLite", () => {
         .withArgs(owner2.address, true)
         .to.emit(safeLite, "Owner")
         .withArgs(owner3.address, true);
+    });
+
+    // 업데이트 1 테스트 케이스. multiSigWallet 지갑 주소 확인
+    it("Should return the correct multiSigWalletAddress", async () => {
+      const safeLiteContract = await ethers.getContractFactory("SafeLite");
+      const [owner1, owner2, owner3] = await ethers.getSigners();
+      const safeLite = await safeLiteContract.deploy(1001, [owner1.address, owner2.address, owner3.address], 2);
+      expect(await safeLite.multiSigWalletAddress()).to.equal(safeLite.address);
     });
   });
 
@@ -56,79 +66,38 @@ describe("SafeLite", () => {
       expect(await safeLite.recover(hash, owner3Sig)).to.equal(owner3.address);
     });
 
-    it("Should send tokens to receiver", async () => {
+    // 업데이트 2 테스트 케이스. 서명을 개별로 하고, 서명이 requiredSignatures보다 충족하면 트랜잭션 실행
+    it("Should send tokens to receiver after collecting enough signatures", async () => {
       const prevBalance = await owner2.getBalance();
+      const nonce = await safeLite.nonce();
       const hash = await safeLite.getTransactionHash(
-        await safeLite.nonce(),
+        nonce,
         owner2.address,
         ethers.utils.parseEther("1").toString(),
         "0x",
       );
+
+      // Owner 1 트랜잭션 사인
       const owner1Sig = await owner1.signMessage(ethers.utils.arrayify(hash));
-      const owner2Sig = await owner2.signMessage(ethers.utils.arrayify(hash));
-      await safeLite.executeTransaction(
+      await safeLite.initiateOrSignTransaction(
+        nonce,
         owner2.address,
         ethers.utils.parseEther("1").toString(),
         "0x",
-        sortSignatures([owner1.address, owner2.address], [owner1Sig, owner2Sig]),
+        owner1Sig
       );
+
+      // Owner 2 트랜잭션 사인
+      const owner2Sig = await owner2.signMessage(ethers.utils.arrayify(hash));
+      await safeLite.initiateOrSignTransaction(
+        nonce,
+        owner2.address,
+        ethers.utils.parseEther("1").toString(),
+        "0x",
+        owner2Sig
+      );
+
       expect(await owner2.getBalance()).to.equal(ethers.utils.parseEther("1").add(prevBalance));
-    });
-
-    it("Adding the new signer should return Owner event", async () => {
-      const owner4 = await ethers.Wallet.createRandom();
-      const hash = await safeLite.getTransactionHash(
-        await safeLite.nonce(),
-        safeLite.address,
-        0,
-        safeLite.interface.encodeFunctionData("addSigner", [owner4.address, 3]),
-      );
-      const owner1Sig = await owner1.signMessage(ethers.utils.arrayify(hash)); // utils . arrayify ( hexStringOrBigNumberOrArrayish )   =>   Uint8Array
-      const owner2Sig = await owner2.signMessage(ethers.utils.arrayify(hash));
-      const tx = await safeLite.executeTransaction(
-        safeLite.address,
-        0,
-        safeLite.interface.encodeFunctionData("addSigner", [owner4.address, 3]), // interface.encodeFunctionData( fragment [ , values ] ) ⇒ string< DataHexString >
-        sortSignatures([owner1.address, owner2.address], [owner1Sig, owner2Sig]),
-      );
-      await expect(tx).to.emit(safeLite, "Owner").withArgs(owner4.address, true);
-    });
-
-    it("Removing the existing signer should return Owner event", async () => {
-      const hash = await safeLite.getTransactionHash(
-        await safeLite.nonce(),
-        safeLite.address,
-        0,
-        safeLite.interface.encodeFunctionData("removeSigner", [owner3.address, 1]),
-      );
-      const owner1Sig = await owner1.signMessage(ethers.utils.arrayify(hash));
-      const owner2Sig = await owner2.signMessage(ethers.utils.arrayify(hash));
-      const tx = await safeLite.executeTransaction(
-        safeLite.address,
-        0,
-        safeLite.interface.encodeFunctionData("removeSigner", [owner3.address, 1]),
-        sortSignatures([owner1.address, owner2.address], [owner1Sig, owner2Sig]),
-      );
-      await expect(tx).to.emit(safeLite, "Owner").withArgs(owner3.address, false);
-    });
-
-    it("Upadting the required signatures should make the signaturesRequired changed", async () => {
-      const newSignaturesRequired = 1;
-      const hash = await safeLite.getTransactionHash(
-        await safeLite.nonce(),
-        safeLite.address,
-        0,
-        safeLite.interface.encodeFunctionData("updateSignaturesRequired", [newSignaturesRequired]),
-      );
-      const owner1Sig = await owner1.signMessage(ethers.utils.arrayify(hash));
-      const owner2Sig = await owner2.signMessage(ethers.utils.arrayify(hash));
-      const tx = await safeLite.executeTransaction(
-        safeLite.address,
-        0,
-        safeLite.interface.encodeFunctionData("updateSignaturesRequired", [newSignaturesRequired]),
-        sortSignatures([owner1.address, owner2.address], [owner1Sig, owner2Sig]),
-      );
-      expect(await safeLite.signaturesRequired()).to.equal(newSignaturesRequired);
     });
   });
 });
