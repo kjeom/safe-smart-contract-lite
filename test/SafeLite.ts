@@ -198,5 +198,34 @@ describe("SafeLite", () => {
     });
 
     // 테스트 케이스 추가, 한 사람이 3번하는 것과 같은 중복테스트.
+    it("Should not allow a signer to sign a transaction more than once", async () => {
+      const nonce = await safeLite.nonce();
+      const hash = await safeLite.getTransactionHash(
+        nonce,
+        owner2.address,
+        ethers.utils.parseEther("1").toString(),
+        "0x"
+      );
+
+      // Owner 1 signs the transaction
+      const owner1Sig = await owner1.signMessage(ethers.utils.arrayify(hash));
+      await safeLite.initiateOrSignTransaction(
+        nonce,
+        owner2.address,
+        ethers.utils.parseEther("1").toString(),
+        "0x",
+        owner1Sig
+      );
+
+      // Owner 1 signs the transaction again
+      const owner1Sig2 = await owner1.signMessage(ethers.utils.arrayify(hash));
+      await expect(safeLite.initiateOrSignTransaction(
+        nonce,
+        owner2.address,
+        ethers.utils.parseEther("1").toString(),
+        "0x",
+        owner1Sig2
+        )).to.be.revertedWith("Signature already recorded");
+    });
   });
 });
