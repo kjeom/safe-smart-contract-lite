@@ -3,13 +3,11 @@ import { Contract } from "ethers";
 import { ethers } from "hardhat";
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
 
-/*
 const sortSignatures = (signers: string[], signatures: string[]): string[] => {
   const combined = signers.map((address, i) => ({ address, signature: signatures[i] }));
   combined.sort((a, b) => a.address.localeCompare(b.address));
   return combined.map((x) => x.signature);
 };
-*/
 
 describe("SafeLite", () => {
   describe("Deployment", () => {
@@ -97,7 +95,108 @@ describe("SafeLite", () => {
         owner2Sig
       );
 
+      const transaction = await safeLite.transactions(nonce);
+      expect(transaction.signatureCount).to.equal(2);
       expect(await owner2.getBalance()).to.equal(ethers.utils.parseEther("1").add(prevBalance));
     });
+
+    // 서명이 충족되지 않으면 트랜잭션이 실행되지 않아야 함
+    it("Should not execute transaction if not enough signatures", async () => {
+      const nonce = await safeLite.nonce();
+      const hash = await safeLite.getTransactionHash(
+        nonce,
+        owner2.address,
+        ethers.utils.parseEther("1").toString(),
+        "0x"
+      );
+
+      // Owner 1 트랜잭션 사인
+      const owner1Sig = await owner1.signMessage(ethers.utils.arrayify(hash));
+      await safeLite.initiateOrSignTransaction(
+        nonce,
+        owner2.address,
+        ethers.utils.parseEther("1"),
+        "0x",
+        owner1Sig
+      );
+
+      // 트랜잭션 실행됐는지 확인
+      const transaction = await safeLite.transactions(nonce);
+      expect(transaction.signatureCount).to.equal(1);
+      expect(transaction.executed).to.equal(false);
+    });
+
+    it("Should increment signatureCount when signing a transaction", async () => {
+      const nonce = await safeLite.nonce();
+      const hash = await safeLite.getTransactionHash(
+        nonce,
+        owner2.address,
+        ethers.utils.parseEther("1").toString(),
+        "0x"
+      );
+    
+      // Owner 1 signs the transaction
+      const owner1Sig = await owner1.signMessage(ethers.utils.arrayify(hash));
+      await safeLite.initiateOrSignTransaction(
+        nonce,
+        owner2.address,
+        ethers.utils.parseEther("1").toString(),
+        "0x",
+        owner1Sig
+      );
+    
+      // Check that signatureCount is incremented
+      const transaction = await safeLite.transactions(nonce);
+      expect(transaction.signatureCount).to.equal(1);
+    
+      // Owner 2 signs the transaction
+      const owner2Sig = await owner2.signMessage(ethers.utils.arrayify(hash));
+      await safeLite.initiateOrSignTransaction(
+        nonce,
+        owner2.address,
+        ethers.utils.parseEther("1").toString(),
+        "0x",
+        owner2Sig
+      );
+    
+      // Check that signatureCount is incremented again
+      const updatedTransaction = await safeLite.transactions(nonce);
+      expect(updatedTransaction.signatureCount).to.equal(2);
+    });
+    it("Should return the correct transaction details", async () => {
+      const nonce = await safeLite.nonce();
+      const toAddress = owner2.address;
+      const value = ethers.utils.parseEther("1");
+      const data = "0x";
+
+      // Transaction 생성 및 서명
+      const hash = await safeLite.getTransactionHash(
+        nonce,
+        toAddress,
+        value.toString(),
+        data
+      );
+
+      const owner1Sig = await owner1.signMessage(ethers.utils.arrayify(hash));
+      await safeLite.initiateOrSignTransaction(
+        nonce,
+        toAddress,
+        value.toString(),
+        data,
+        owner1Sig
+      );
+
+      // 트랜잭션 정보 확인
+      const transaction = await safeLite.getTransaction(nonce);
+
+      expect(transaction[0]).to.equal(toAddress);
+      expect(transaction[1]).to.equal(value);
+      expect(transaction[2]).to.equal(data);
+      expect(transaction[3]).to.equal(false); // 아직 실행되지 않음
+      expect(transaction[4]).to.equal(1); // 서명 수는 1이어야 함
+      
+    });
+
+    // 테스트 케이스 추가, 한 사람이 3번하는 것과 같은 중복테스트.
   });
 });

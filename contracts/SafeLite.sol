@@ -95,6 +95,8 @@ contract SafeLite {
     ) public view returns (bytes32) {
         return keccak256(abi.encodePacked(address(this), chainId, _nonce, to, value, data));
     }
+    
+    // 업데이트 2. 트랜잭션을 생성하고 서명을 받는 함수
     function initiateOrSignTransaction(
         uint256 _nonce,
         address payable to,
@@ -104,13 +106,12 @@ contract SafeLite {
     ) public {
         require(isOwner[msg.sender], "initiateOrSignTransaction: only owners can initiate or sign transactions");
 
-        if (_nonce == nonce) { // 새로운 트랜잭션이라면 해당 트랜잭션에 각 필드를 기록
+        if (_nonce == nonce && transactions[_nonce].to == address(0)) { // 새로운 트랜잭션이라면 해당 트랜잭션에 각 필드를 기록
             transactions[nonce].to = to;
             transactions[nonce].value = value;
             transactions[nonce].data = data;
             transactions[nonce].executed = false;
             transactions[nonce].signatureCount = 0;
-            nonce++; // 다음 트랜잭션을 위해 nonce 값 증가
         }
 
         // 현재 트랜잭션이 있다면, 해당 트랜잭션을 참조하기 위한 storage 포인터를 가져옴
@@ -151,6 +152,9 @@ contract SafeLite {
         // 트랜잭션을 실행하고 실행 여부를 true로 변경
         transaction.executed = true;
 
+        // 다음 트랜잭션을 위해 nonce 값 증가
+        nonce++;
+
         // 트랜잭션을 실행하고 결과를 받기
         (bool success, bytes memory result) = transaction.to.call{value: transaction.value}(transaction.data);
         require(success, "executeTransaction: tx failed");
@@ -158,42 +162,31 @@ contract SafeLite {
         emit ExecuteTransaction(msg.sender, transaction.to, transaction.value, transaction.data, _nonce, keccak256(abi.encodePacked(transaction.to, transaction.value, transaction.data)), result);
     }
 
-    // 기존 executeTransaction 함수
-    /* function executeTransaction(
-        address payable to,
-        uint256 value,
-        bytes memory data,
-        bytes[] memory signatures
-    ) public returns (bytes memory) {
-        require(isOwner[msg.sender], "executeTransaction: only owners can execute");
-        bytes32 _hash = getTransactionHash(nonce, to, value, data);
-        nonce++;
-        uint256 validSignatures;
-        address duplicateGuard = address(0);
-        for (uint i = 0; i < signatures.length; i++) {
-            address recovered = recover(_hash, signatures[i]);
-            require(recovered > duplicateGuard, "executeTransaction: duplicate or unordered signatures");
-            duplicateGuard = recovered;
-            if (isOwner[recovered]) {
-                validSignatures++;
-            }
-        }
-
-        require(validSignatures >= signaturesRequired, "executeTransaction: not enough valid signatures");
-
-        (bool success, bytes memory result) = to.call{value: value}(data);
-        require(success, "executeTransaction: tx failed");
-
-        emit ExecuteTransaction(msg.sender, to, value, data, nonce - 1, _hash, result);
-        return result;
-    } */
-
     function recover(bytes32 _hash, bytes memory _signature) public pure returns (address) {
         return _hash.toEthSignedMessageHash().recover(_signature);
     }
 
     function getMultiSigWalletAddress() public view returns (address) {
         return multiSigWalletAddress;
+    }
+
+    // 업데이트 4. 트랜잭션 정보를 가져오는 함수
+    function getTransaction(uint256 transactionId) public view returns (address, uint256, bytes memory, bool, uint256) {
+        Transaction storage transaction = transactions[transactionId];
+        return (
+            transaction.to,
+            transaction.value,
+            transaction.data,
+            transaction.executed,
+            transaction.signatureCount
+        );
+    }
+
+    // 업데이트 5. 내 지갑이 속한 멀티시그 주소를 불러오는 함수
+    // owners 배열에 내 지갑이 포함되어 있으면 멀티시그 주소를 반환
+
+    function getSignatureCount(uint256 transactionId) public view returns (uint256) {
+    return transactions[transactionId].signatureCount;
     }
 
     receive() external payable {
