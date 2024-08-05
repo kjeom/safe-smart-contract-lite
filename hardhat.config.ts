@@ -19,7 +19,7 @@ const config: HardhatUserConfig = {
   },
   networks: {
     baobab: {
-      url: process.env.BAOBAB_URL || "https://archive-en.baobab.klaytn.net",
+      url: process.env.BAOBAB_URL || "https://public-en-baobab.klaytn.net",
       chainId: 1001,
       accounts: [process.env.PRIVATE_KEY || defaultKey, defaultKey2],
       live: true,

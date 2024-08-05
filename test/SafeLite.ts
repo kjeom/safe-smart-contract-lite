@@ -3,12 +3,6 @@ import { Contract } from "ethers";
 import { ethers } from "hardhat";
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
 
-const sortSignatures = (signers: string[], signatures: string[]): string[] => {
-  const combined = signers.map((address, i) => ({ address, signature: signatures[i] }));
-  combined.sort((a, b) => a.address.localeCompare(b.address));
-  return combined.map((x) => x.signature);
-};
-
 describe("SafeLite", () => {
   describe("Deployment", () => {
     it("Should return Owner event with address and isOwner for each owner", async () => {
@@ -23,20 +17,13 @@ describe("SafeLite", () => {
         .to.emit(safeLite, "Owner")
         .withArgs(owner3.address, true);
     });
-
-    it("Should return the correct multiSigWalletAddress", async () => {
-      const safeLiteContract = await ethers.getContractFactory("SafeLite");
-      const [owner1, owner2, owner3] = await ethers.getSigners();
-      const safeLite = await safeLiteContract.deploy(1001, [owner1.address, owner2.address, owner3.address], 2);
-      expect(await safeLite.multiSigWalletAddress()).to.equal(safeLite.address);
-    });
   });
 
-  describe("execute transaction", () => {
+  describe("Sign/execute transaction", () => {
     let safeLite: Contract;
-    let owner1:SignerWithAddress;
-    let owner2:SignerWithAddress; 
-    let owner3:SignerWithAddress;
+    let owner1: SignerWithAddress;
+    let owner2: SignerWithAddress; 
+    let owner3: SignerWithAddress;
     
     beforeEach(async () => {
       const safeLiteContract = await ethers.getContractFactory("SafeLite");
@@ -79,7 +66,8 @@ describe("SafeLite", () => {
         owner2.address,
         ethers.utils.parseEther("1").toString(),
         "0x",
-        owner1Sig
+        owner1Sig,
+        true
       );
 
       const owner2Sig = await owner2.signMessage(ethers.utils.arrayify(hash));
@@ -88,11 +76,12 @@ describe("SafeLite", () => {
         owner2.address,
         ethers.utils.parseEther("1").toString(),
         "0x",
-        owner2Sig
+        owner2Sig,
+        true
       );
 
       const transaction = await safeLite.transactions(nonce);
-      expect(transaction.signatureCount).to.equal(2);
+      expect(transaction.approvalCount).to.equal(2);
       expect(await owner2.getBalance()).to.equal(ethers.utils.parseEther("1").add(prevBalance));
     });
 
@@ -111,11 +100,12 @@ describe("SafeLite", () => {
         owner2.address,
         ethers.utils.parseEther("1"),
         "0x",
-        owner1Sig
+        owner1Sig,
+        true
       );
 
       const transaction = await safeLite.transactions(nonce);
-      expect(transaction.signatureCount).to.equal(1);
+      expect(transaction.approvalCount).to.equal(1);
       expect(transaction.executed).to.equal(false);
     });
 
@@ -134,11 +124,12 @@ describe("SafeLite", () => {
         owner2.address,
         ethers.utils.parseEther("1").toString(),
         "0x",
-        owner1Sig
+        owner1Sig,
+        true
       );
 
       const transaction = await safeLite.transactions(nonce);
-      expect(transaction.signatureCount).to.equal(1);
+      expect(transaction.approvalCount).to.equal(1);
     
       const owner2Sig = await owner2.signMessage(ethers.utils.arrayify(hash));
       await safeLite.signTransaction(
@@ -146,12 +137,14 @@ describe("SafeLite", () => {
         owner2.address,
         ethers.utils.parseEther("1").toString(),
         "0x",
-        owner2Sig
+        owner2Sig,
+        true
       );
     
       const updatedTransaction = await safeLite.transactions(nonce);
-      expect(updatedTransaction.signatureCount).to.equal(2);
+      expect(updatedTransaction.approvalCount).to.equal(2);
     });
+
     it("Should return the correct transaction details", async () => {
       const nonce = await safeLite.nonce();
       const toAddress = owner2.address;
@@ -171,7 +164,8 @@ describe("SafeLite", () => {
         toAddress,
         value.toString(),
         data,
-        owner1Sig
+        owner1Sig,
+        true
       );
 
       const transaction = await safeLite.getTransaction(nonce);
@@ -180,8 +174,9 @@ describe("SafeLite", () => {
       expect(transaction[1]).to.equal(value);
       expect(transaction[2]).to.equal(data);
       expect(transaction[3]).to.equal(false); 
-      expect(transaction[4]).to.equal(1); 
-      
+      expect(transaction[4]).to.equal(1);
+      expect(transaction[5]).to.equal(0);
+      expect(transaction[6]).to.equal(false);
     });
 
     it("Should not allow a signer to sign a transaction more than once", async () => {
@@ -199,17 +194,52 @@ describe("SafeLite", () => {
         owner2.address,
         ethers.utils.parseEther("1").toString(),
         "0x",
-        owner1Sig
+        owner1Sig,
+        true
       );
 
-      const owner1Sig2 = await owner1.signMessage(ethers.utils.arrayify(hash));
       await expect(safeLite.signTransaction(
         nonce,
         owner2.address,
         ethers.utils.parseEther("1").toString(),
         "0x",
-        owner1Sig2
+        owner1Sig,
+        true
         )).to.be.revertedWith("Signature already recorded");
+    });
+
+    it("Should reject transaction if enough rejection signatures are collected", async () => {
+      const nonce = await safeLite.nonce();
+      const hash = await safeLite.getTransactionHash(
+        nonce,
+        owner2.address,
+        ethers.utils.parseEther("1").toString(),
+        "0x"
+      );
+
+      const owner1Sig = await owner1.signMessage(ethers.utils.arrayify(hash));
+      await safeLite.signTransaction(
+        nonce,
+        owner2.address,
+        ethers.utils.parseEther("1").toString(),
+        "0x",
+        owner1Sig,
+        false
+      );
+
+      const owner2Sig = await owner2.signMessage(ethers.utils.arrayify(hash));
+      await safeLite.signTransaction(
+        nonce,
+        owner2.address,
+        ethers.utils.parseEther("1").toString(),
+        "0x",
+        owner2Sig,
+        false
+      );
+
+      const transaction = await safeLite.transactions(nonce);
+      expect(transaction.rejectionCount).to.equal(2);
+      expect(transaction.rejected).to.equal(true);
     });
   });
 
@@ -237,8 +267,8 @@ describe("SafeLite", () => {
       const owner1Sig = await owner1.signMessage(ethers.utils.arrayify(hash));
       const owner2Sig = await owner2.signMessage(ethers.utils.arrayify(hash));
 
-      await safeLite.signTransaction(nonce, safeLite.address, 0, data, owner1Sig);
-      await safeLite.signTransaction(nonce, safeLite.address, 0, data, owner2Sig);
+      await safeLite.signTransaction(nonce, safeLite.address, 0, data, owner1Sig, true);
+      await safeLite.signTransaction(nonce, safeLite.address, 0, data, owner2Sig, true);
 
       expect(await safeLite.isOwner(newOwner.address)).to.be.true;
 
@@ -259,8 +289,8 @@ describe("SafeLite", () => {
       const owner1Sig = await owner1.signMessage(ethers.utils.arrayify(hash));
       const owner2Sig = await owner2.signMessage(ethers.utils.arrayify(hash));
 
-      await safeLite.signTransaction(nonce, safeLite.address, 0, data, owner1Sig);
-      await safeLite.signTransaction(nonce, safeLite.address, 0, data, owner2Sig);
+      await safeLite.signTransaction(nonce, safeLite.address, 0, data, owner1Sig, true);
+      await safeLite.signTransaction(nonce, safeLite.address, 0, data, owner2Sig, true);
 
       expect(await safeLite.isOwner(owner3.address)).to.be.false;
 
